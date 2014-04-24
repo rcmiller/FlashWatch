@@ -10,7 +10,7 @@ typedef struct {
 } FlashCard;
 
 static FlashCard cards[] = {
-  { "riseling", "sweet white, off-dry apricots peaches" },
+  { "riesling", "sweet white, off-dry apricots peaches" },
   { "sancerre", "dry white, light herbal grassy" },
   { "pinot grigio", "dry white, light citrus lemon" },
   { "pinot blanc", "dry white, light grapefruit floral" },
