@@ -1,7 +1,8 @@
 {
     "appKeys": {
         "front": 0,
-        "back": 1
+        "back": 1,
+        "result": 2
     },
     "resources": {
         "media": []

@@ -1,7 +1,11 @@
 Pebble.addEventListener("ready",
                         function(e) {
-                            console.log("ready: " + e.ready);
-                          console.log(e.type);
+                            console.log("ready: " + e.ready); 
+                            Pebble.sendAppMessage({
+                                "front": "riesling",
+                                "back": "off-dry white",
+                                "result": 0,
+                            });
                         });
 
 Pebble.addEventListener("appmessage",
@@ -9,10 +13,12 @@ Pebble.addEventListener("appmessage",
                             console.log("appmessage: type=" + e.type 
                                         + ", front=" + e.payload.front
                                         + ", back=" + e.payload.back
+                                        + ", result=" + e.payload.result
                                         );
                             Pebble.sendAppMessage({
                                 "front": "sancerre",
-                                 "back": "dry white"
+                                "back": "dry white",
+                                "result": 0,
                             });
                         });
 

@@ -30,9 +30,18 @@ int num_cards = sizeof(cards) / sizeof(cards[0]);
 
 
 //// Communication with phone
+
+// keys for message tuple
 enum {
-  FLASH_KEY_FRONT = 0x0,
-  FLASH_KEY_BACK = 0x1,
+  FLASH_KEY_FRONT = 0x0,  // type: string
+  FLASH_KEY_BACK = 0x1,   // type: string
+  FLASH_KEY_RESULT = 0x2, // type: uint8
+};
+
+// values for RESULT
+enum {
+    WAITING = 0,
+    DONE = 1,
 };
 
 struct AppSync appsync;
@@ -60,7 +69,7 @@ char *translate_error(AppMessageResult result) {
 }
 
 void connection_tuple_changed(const uint32_t key, const Tuple *new_tuple, const Tuple *old_tuple, void *context) {
-    APP_LOG(APP_LOG_LEVEL_ERROR, "tuple changed: key=%d, value=%s", key, new_tuple->value->cstring);    
+    APP_LOG(APP_LOG_LEVEL_ERROR, "tuple changed: key=%u, value=%s", (unsigned) key, new_tuple->value->cstring);    
 }
 
 void connection_error(DictionaryResult dict_error, AppMessageResult app_message_error, void *context) {
@@ -78,8 +87,8 @@ void connection_send_failed(DictionaryIterator *iterator, AppMessageResult reaso
 void connection_create() {
     AppMessageResult result;
     
-    // make the buffer big enough to hold one question and one answer, each max 100 bytes long
-    int buffer_size = dict_calc_buffer_size(2, 100, 100);
+    // make the buffer big enough to hold question/answer/result
+    int buffer_size = dict_calc_buffer_size(3, 100, 100, 1);
     APP_LOG(APP_LOG_LEVEL_ERROR, "buffer size=%d", buffer_size);  
 
     // open the AppMessage library
@@ -88,8 +97,9 @@ void connection_create() {
     
     // open the AppSync library
     Tuplet tuples[] = {
-        TupletCString(FLASH_KEY_FRONT, "riesling"),
-        TupletCString(FLASH_KEY_BACK, "off-dry white"),
+        TupletCString(FLASH_KEY_FRONT, ""),
+        TupletCString(FLASH_KEY_BACK, ""),
+        TupletInteger(FLASH_KEY_RESULT, 0),
     };        
     sync_buffer = malloc(buffer_size);
     app_sync_init(&appsync, sync_buffer, buffer_size, tuples, sizeof(tuples)/sizeof(Tuplet), connection_tuple_changed, connection_error, NULL);
@@ -107,8 +117,7 @@ void connection_destroy() {
 void connection_send_something() {
     AppMessageResult result;
     Tuplet tuples[] = {
-        TupletCString(FLASH_KEY_FRONT, "pinot noir"),
-        TupletCString(FLASH_KEY_BACK, "fruity red"),
+        TupletInteger(FLASH_KEY_RESULT, (uint8_t) DONE),
     };        
     result = app_sync_set(&appsync, tuples, sizeof(tuples)/sizeof(Tuplet));
     APP_LOG(APP_LOG_LEVEL_ERROR, "app_sync_set returned %s", translate_error(result));  
