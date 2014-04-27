@@ -1,22 +1,22 @@
 {
-    "appKeys": {
-        "front": 0,
-        "back": 1,
-        "result": 2
-    },
+    "capabilities": [
+        ""
+    ],
+    "versionCode": 1,
+    "shortName": "FlashWatch",
+    "uuid": "6a99ac7c-1402-4427-8d8c-7013a1769e63",
+    "companyName": "rcm@mit.edu",
     "resources": {
         "media": []
     },
     "watchapp": {
         "watchface": false
     },
-    "shortName": "FlashWatch",
     "versionLabel": "1.0",
-    "versionCode": 1,
     "longName": "FlashWatch",
-    "companyName": "rcm@mit.edu",
-    "capabilities": [
-        ""
-    ],
-    "uuid": "6a99ac7c-1402-4427-8d8c-7013a1769e63"
+    "appKeys": {
+        "front": 0,
+        "back": 1,
+        "result": 2
+    }
 }
