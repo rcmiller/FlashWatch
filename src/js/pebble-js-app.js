@@ -1,16 +1,70 @@
-var flashcards = [
-    { front: "riesling", back: "sweet white, off-dry apricots peaches" },
-    { front: "sancerre", back: "dry white, light herbal grassy" },
-    { front: "pinot grigio", back: "dry white, light citrus lemon" },
-    { front: "pinot blanc", back: "dry white, light grapefruit floral" },
-    { front: "cotes du rhone", back: "fruity red, strawberry cherry, round" },
-    { front: "cabernet sauvignon", back: "fruity red, black cherry raspberry, high tannin" },
-    { front: "shiraz", back: "fruity red, blueberry blackberry, spicy" },
-    { front: "chianti", back: "savory red, clay cured meats, high tannin" },
-    { front: "pinot noir", back: "fruity red, strawberry cherry, round" },
-    { front: "merlot", back: "fruity red, black cherry raspberry, round" }
-];
+function makeCard(front, back) {
+    return {
+        front: front,
+        back: back,
+        numRight: 0,
+        numWrong: 0,
+        nextTime: futureTime(0, 5)
+    };
+}
 
+var intervalsInSeconds = [
+    1,
+    5,
+    25, 
+    120, // 2 minutes
+    600, // 10 minutes    
+]
+var flashcards = [
+    makeCard("riesling", "sweet white, off-dry apricots peaches"),
+    makeCard("sancerre", "dry white, light herbal grassy"),
+    makeCard("pinot grigio", "dry white, light citrus lemon"),
+    makeCard("pinot blanc", "dry white, light grapefruit floral"),
+    makeCard("cotes du rhone", "fruity red, strawberry cherry, round"),
+    makeCard("cabernet sauvignon", "fruity red, black cherry raspberry, high tannin"),
+    makeCard("shiraz", "fruity red, blueberry blackberry, spicy"),
+    makeCard("chianti", "savory red, clay cured meats, high tannin"),
+    makeCard("pinot noir", "fruity red, strawberry cherry, round"),
+    makeCard("merlot", "fruity red, black cherry raspberry, round"),
+];
+reschedule(flashcards);
+
+function findCard(front, back) {
+    for (var i in flashcards) {
+        var card = flashcards[i];
+        if (card.front == front && card.back == back) return card;
+    }
+    return null;
+}
+
+function nextCard() {
+    return flashcards[0];
+}
+
+function promote(card) {
+    ++card.numRight;
+    var interval = intervalsInSeconds[Math.min(card.numRight, intervalsInSeconds.length-1)];
+    card.nextTime = futureTime(interval, interval*0.1);
+    reschedule(flashcards);
+}
+
+function reschedule(flashcards) {
+    flashcards.sort(function(a,b) {
+        return a.nextTime - b.nextTime;
+    });
+    for (var i in flashcards) {
+        var card = flashcards[i];
+        console.log(card.front + " / " + card.back + " / " + card.nextTime);
+    }    
+}
+
+function futureTime(nSecondsFromNow, randomPerturbationWidth) {
+    var now = new Date().getTime();
+    var perturb = (-1 + 2*Math.random()) * randomPerturbationWidth;
+    var result = now + nSecondsFromNow + perturb;
+    console.log(result);
+    return result;
+}
 
 function pickAnyCard(cards) {
     var i = Math.floor(Math.random() * cards.length);
@@ -25,10 +79,11 @@ function sendCard(card) {
     });
 }
 
+
 Pebble.addEventListener("ready",
                         function(e) {
                             console.log("ready: " + e.ready);
-                            sendCard(pickAnyCard(flashcards));
+                            sendCard(nextCard());
                         });
 
 Pebble.addEventListener("appmessage",
@@ -38,7 +93,9 @@ Pebble.addEventListener("appmessage",
                                         + ", back=" + e.payload.back
                                         + ", result=" + e.payload.result
                                         );
-                            sendCard(pickAnyCard(flashcards));
+                            var card = findCard(e.payload.front, e.payload.back);
+                            if (card) {
+                                promote(card);
+                            }
+                            sendCard(nextCard());
                         });
-
- 

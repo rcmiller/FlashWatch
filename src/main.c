@@ -25,26 +25,20 @@ char *strdup(const char *s) {
 
 //// Flashcard data representation
 
+#define MAX_TEXT 100
+
 typedef struct {
-  const char * front;
-  const char * back;
+  char front[MAX_TEXT];
+  char back[MAX_TEXT];
 } FlashCard;
 
+FlashCard theCard;
 
-FlashCard* FlashCard_create(const char* front, const char* back) {
-    FlashCard* card = malloc(sizeof(FlashCard));
-    card->front = strdup(front);
-    card->back = strdup(back);
-    return card;
+void flashcard_set(FlashCard* card, const char* front, const char* back) {
+    strncpy(card->front, front, sizeof(card->front)-1);
+    strncpy(card->back, back, sizeof(card->back)-1);
 }
 
-void FlashCard_destroy(FlashCard* card) {
-    free((void *)card->front);
-    free((void *)card->back);
-    free(card);
-}
-
-FlashCard* theCard = NULL;
 
 //// Some hard-coded cards
 
@@ -222,14 +216,10 @@ void connection_received(DictionaryIterator* iterator, void *context) {
         return;
     }
     APP_LOG(APP_LOG_LEVEL_ERROR, "received new card: front=%s, back=%s", front_tuple->value->cstring, back_tuple->value->cstring);
-    if (theCard) {
-        FlashCard_destroy(theCard);
-        theCard = NULL;
-    }
-    theCard = FlashCard_create(front_tuple->value->cstring, back_tuple->value->cstring);
+    flashcard_set(&theCard, front_tuple->value->cstring, back_tuple->value->cstring);
     
     destroy_flashcard_layers();
-    create_flashcard_layers(theCard);  
+    create_flashcard_layers(&theCard);  
 }
 
 void connection_sent() {
@@ -237,14 +227,14 @@ void connection_sent() {
 }
 
 void connection_send_failed(DictionaryIterator *iterator, AppMessageResult reason, void *context) {
-    APP_LOG(APP_LOG_LEVEL_ERROR, "send failed");    
+    APP_LOG(APP_LOG_LEVEL_ERROR, "send failed: %s", translate_error(reason));    
 }
 
 void connection_create() {
     AppMessageResult result;
     
     // make the buffer big enough to hold question/answer/result
-    int buffer_size = dict_calc_buffer_size(3, 100, 100, 1);
+    int buffer_size = dict_calc_buffer_size(3, MAX_TEXT, MAX_TEXT, 1);
     APP_LOG(APP_LOG_LEVEL_ERROR, "buffer size=%d", buffer_size);  
 
     // open the AppMessage library
@@ -276,6 +266,8 @@ void connection_send_result() {
         return;
     }
     
+    dict_write_cstring(iter, FLASH_KEY_FRONT, theCard.front);
+    dict_write_cstring(iter, FLASH_KEY_BACK, theCard.back);
     dict_write_uint8(iter, FLASH_KEY_RESULT, (uint8_t) DONE);
     
     result = app_message_outbox_send();
@@ -302,7 +294,6 @@ void handle_init(void) {
 
 void handle_deinit(void) {
     destroy_flashcard_layers();
-    FlashCard_destroy(theCard);
     window_destroy(window);
     connection_destroy();
 }
