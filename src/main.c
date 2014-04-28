@@ -2,13 +2,26 @@
 
 // forward declarations
 void connection_send_result();
-    
-    
+
 //// UI elements 
 Window *window = NULL;
 TextLayer *front_layer = NULL;
 TextLayer *back_layer = NULL;
 
+enum AppState {
+    WAITING_FOR_CARD,  // front_layer and back_layer are both null
+    SHOWING_ONE_FACE,  // front_layer and back_layer exists, one is hidden
+    SHOWING_TWO_FACES, // both exist, both visible
+} theState = WAITING_FOR_CARD;
+
+//// copying a string into fresh memory
+
+char *strdup(const char *s) {
+    char *t = malloc(strlen(s));
+    if (!t) return NULL;
+    strcpy(t, s);
+    return t;
+}
 
 //// Flashcard data representation
 
@@ -17,9 +30,21 @@ typedef struct {
   const char * back;
 } FlashCard;
 
-FlashCard theCard = { "starting", "initial" };
 
+FlashCard* FlashCard_create(const char* front, const char* back) {
+    FlashCard* card = malloc(sizeof(FlashCard));
+    card->front = strdup(front);
+    card->back = strdup(back);
+    return card;
+}
 
+void FlashCard_destroy(FlashCard* card) {
+    free((void *)card->front);
+    free((void *)card->back);
+    free(card);
+}
+
+FlashCard* theCard = NULL;
 
 //// Some hard-coded cards
 
@@ -86,7 +111,7 @@ TextLayer* make_text(const char* text, bool is_front) {
 
 //// Displaying a flashcard
 
-void flashcard_create(FlashCard *card) {
+void create_flashcard_layers(FlashCard *card) {
 
   	// create text layers for the front and back of the flashcard
     front_layer = make_text(card->front, true);  
@@ -102,13 +127,23 @@ void flashcard_create(FlashCard *card) {
   
     // wake up the user
     //vibes_short_pulse();
-    light_enable_interaction();
+    //light_enable_interaction();
+    
+    theState = SHOWING_ONE_FACE;
 }
 
-void flashcard_destroy() {    
+void show_both_flashcard_layers() {
+    layer_set_hidden(text_layer_get_layer(front_layer), false);
+    layer_set_hidden(text_layer_get_layer(back_layer), false);
+    theState = SHOWING_TWO_FACES;
+}
+
+void destroy_flashcard_layers() {    
     if (front_layer) text_layer_destroy(front_layer);
 	if (back_layer) text_layer_destroy(back_layer);
     front_layer = back_layer = NULL;
+    
+    theState = WAITING_FOR_CARD;
 }
 
 
@@ -118,16 +153,19 @@ void flashcard_destroy() {
 // gives the answer to the flashcard
 void select_click_handler(ClickRecognizerRef recognizer, void *context) {
     // if flashcard is already showing, make a new one
-    if (!layer_get_hidden(text_layer_get_layer(front_layer)) 
-        && !layer_get_hidden(text_layer_get_layer(back_layer))) {
-
-        // send result and request a new flashcard
-        flashcard_destroy();
-        connection_send_result();
-    } else {
-      // make both layers visible
-      layer_set_hidden(text_layer_get_layer(front_layer), false);
-      layer_set_hidden(text_layer_get_layer(back_layer), false);
+    switch (theState) {
+        case WAITING_FOR_CARD: 
+            break;
+        case SHOWING_ONE_FACE: 
+            show_both_flashcard_layers(); 
+            break;
+        case SHOWING_TWO_FACES:
+            // send result and request a new flashcard
+            destroy_flashcard_layers();
+            connection_send_result();
+            break;
+        default:
+            break;
     }
 }
 
@@ -152,10 +190,6 @@ enum {
     DONE = 1,
 };
 
-struct AppSync appsync;
-uint8_t* sync_buffer = NULL;
-int sync_buffer_size = 500; // bytes
-
 char *translate_error(AppMessageResult result) {
   switch (result) {
     case APP_MSG_OK: return "APP_MSG_OK";
@@ -176,29 +210,26 @@ char *translate_error(AppMessageResult result) {
   }
 }
 
-void show_flashcard_sent_by_phone() {
-    const Tuple* front_tuple = app_sync_get(&appsync, FLASH_KEY_FRONT);
-    const Tuple* back_tuple = app_sync_get(&appsync, FLASH_KEY_BACK);
+void connection_error(DictionaryResult dict_error, AppMessageResult app_message_error, void *context) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "dict_error=%d, app_message_error=%s", dict_error, translate_error(app_message_error));
+}
+
+void connection_received(DictionaryIterator* iterator, void *context) {
+    Tuple *front_tuple = dict_find(iterator, FLASH_KEY_FRONT);
+    Tuple *back_tuple = dict_find(iterator, FLASH_KEY_BACK);
     if (!front_tuple || !back_tuple) {
         APP_LOG(APP_LOG_LEVEL_ERROR, "front tuple or back tuple is null");
         return;
     }
-    theCard.front = front_tuple->value->cstring;
-    theCard.back = back_tuple->value->cstring;
-    
-    flashcard_destroy();
-    flashcard_create(&theCard);
-}
-
-void connection_tuple_changed(const uint32_t key, const Tuple *new_tuple, const Tuple *old_tuple, void *context) {
-    APP_LOG(APP_LOG_LEVEL_ERROR, "tuple changed: key=%u, value=%s", (unsigned) key, new_tuple->value->cstring);
-    if (key == FLASH_KEY_RESULT) {
-        show_flashcard_sent_by_phone();
+    APP_LOG(APP_LOG_LEVEL_ERROR, "received new card: front=%s, back=%s", front_tuple->value->cstring, back_tuple->value->cstring);
+    if (theCard) {
+        FlashCard_destroy(theCard);
+        theCard = NULL;
     }
-}
-
-void connection_error(DictionaryResult dict_error, AppMessageResult app_message_error, void *context) {
-    APP_LOG(APP_LOG_LEVEL_ERROR, "dict_error=%d, app_message_error=%s", dict_error, translate_error(app_message_error));
+    theCard = FlashCard_create(front_tuple->value->cstring, back_tuple->value->cstring);
+    
+    destroy_flashcard_layers();
+    create_flashcard_layers(theCard);  
 }
 
 void connection_sent() {
@@ -226,26 +257,29 @@ void connection_create() {
         TupletCString(FLASH_KEY_BACK, ""),
         TupletInteger(FLASH_KEY_RESULT, 0),
     };        
-    sync_buffer = malloc(buffer_size);
-    app_sync_init(&appsync, sync_buffer, buffer_size, tuples, sizeof(tuples)/sizeof(Tuplet), connection_tuple_changed, connection_error, NULL);
     
     // register callbacks
+    app_message_register_inbox_received(connection_received);
     app_message_register_outbox_sent(connection_sent);
     app_message_register_outbox_failed(connection_send_failed);
 }
 
 void connection_destroy() {
-    app_sync_deinit(&appsync);
-    free(sync_buffer);
 }
 
 void connection_send_result() {
     AppMessageResult result;
-    Tuplet tuples[] = {
-        TupletInteger(FLASH_KEY_RESULT, (uint8_t) DONE),
-    };        
-    result = app_sync_set(&appsync, tuples, sizeof(tuples)/sizeof(Tuplet));
-    APP_LOG(APP_LOG_LEVEL_ERROR, "app_sync_set returned %s", translate_error(result));      
+    DictionaryIterator *iter;
+    result = app_message_outbox_begin(&iter);
+    APP_LOG(APP_LOG_LEVEL_ERROR, "app_message_outbox_begin returned %s", translate_error(result)); 
+    if (result != APP_MSG_OK) {
+        return;
+    }
+    
+    dict_write_uint8(iter, FLASH_KEY_RESULT, (uint8_t) DONE);
+    
+    result = app_message_outbox_send();
+    APP_LOG(APP_LOG_LEVEL_ERROR, "app_message_outbox_send returned %s", translate_error(result));
 }
 
 //// App setup and teardown
@@ -256,9 +290,8 @@ void handle_init(void) {
     // seed the random number generator with current time
     srand(time(NULL));
   
-    // make a window and the first flashcard
+    // make a window
 	window = window_create();
-    flashcard_create(&theCard);
     
     // Listen for select button
     window_set_click_config_provider(window, click_config_provider);
@@ -268,7 +301,8 @@ void handle_init(void) {
 }
 
 void handle_deinit(void) {
-    flashcard_destroy();
+    destroy_flashcard_layers();
+    FlashCard_destroy(theCard);
     window_destroy(window);
     connection_destroy();
 }
