@@ -1,7 +1,7 @@
 #include <pebble.h>
 
 // forward declarations
-void connection_send_result();
+void connection_send_result(bool wasRight);
 
 //// UI elements 
 Window *window = NULL;
@@ -147,24 +147,31 @@ void destroy_flashcard_layers() {
 // gives the answer to the flashcard
 void select_click_handler(ClickRecognizerRef recognizer, void *context) {
     // if flashcard is already showing, make a new one
-    switch (theState) {
-        case WAITING_FOR_CARD: 
-            break;
-        case SHOWING_ONE_FACE: 
-            show_both_flashcard_layers(); 
-            break;
-        case SHOWING_TWO_FACES:
-            // send result and request a new flashcard
-            destroy_flashcard_layers();
-            connection_send_result();
-            break;
-        default:
-            break;
+    if (theState == SHOWING_ONE_FACE) {
+        show_both_flashcard_layers(); 
+    }
+}
+
+void up_click_handler(ClickRecognizerRef recognizer, void *context) {
+    if (theState == SHOWING_TWO_FACES) {
+        // send result and request a new flashcard
+        destroy_flashcard_layers();
+        connection_send_result(true);
+    }
+}
+
+void down_click_handler(ClickRecognizerRef recognizer, void *context) {
+    if (theState == SHOWING_TWO_FACES) {
+        // send result and request a new flashcard
+        destroy_flashcard_layers();
+        connection_send_result(false);
     }
 }
 
 void click_config_provider(void *context) {
     window_single_click_subscribe(BUTTON_ID_SELECT, select_click_handler);
+    window_single_click_subscribe(BUTTON_ID_UP, up_click_handler);
+    window_single_click_subscribe(BUTTON_ID_DOWN, down_click_handler);
     
 }
 
@@ -175,13 +182,7 @@ void click_config_provider(void *context) {
 enum {
   FLASH_KEY_FRONT = 0x0,  // type: string
   FLASH_KEY_BACK = 0x1,   // type: string
-  FLASH_KEY_RESULT = 0x2, // type: uint8
-};
-
-// values for RESULT
-enum {
-    WAITING = 0,
-    DONE = 1,
+  FLASH_KEY_RESULT = 0x2, // type: uint8:  0 if wrong, 1 if right
 };
 
 char *translate_error(AppMessageResult result) {
@@ -257,7 +258,7 @@ void connection_create() {
 void connection_destroy() {
 }
 
-void connection_send_result() {
+void connection_send_result(bool wasRight) {
     AppMessageResult result;
     DictionaryIterator *iter;
     result = app_message_outbox_begin(&iter);
@@ -268,7 +269,7 @@ void connection_send_result() {
     
     dict_write_cstring(iter, FLASH_KEY_FRONT, theCard.front);
     dict_write_cstring(iter, FLASH_KEY_BACK, theCard.back);
-    dict_write_uint8(iter, FLASH_KEY_RESULT, (uint8_t) DONE);
+    dict_write_uint8(iter, FLASH_KEY_RESULT, (uint8_t) wasRight);
     
     result = app_message_outbox_send();
     APP_LOG(APP_LOG_LEVEL_ERROR, "app_message_outbox_send returned %s", translate_error(result));

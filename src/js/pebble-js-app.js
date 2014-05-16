@@ -1,13 +1,3 @@
-function makeCard(front, back) {
-    return {
-        front: front,
-        back: back,
-        numRight: 0,
-        numWrong: 0,
-        nextTime: futureTime(0, 5)
-    };
-}
-
 var intervalsInSeconds = [
     1,
     5,
@@ -15,6 +5,21 @@ var intervalsInSeconds = [
     120, // 2 minutes
     600, // 10 minutes    
 ]
+var MAX_BUCKET = intervalsInSeconds.length-1;
+
+function makeCard(front, back) {
+    return {
+        front: front,
+        back: back,
+        numRight: 0,
+        numWrong: 0,
+        bucket: 0,
+        nextTime: perturbInterval(intervalsInSeconds[0])
+    };
+}
+
+var SPREADSHEET_KEY = "1oqSDgRxPEskr2v2G0HlArZjAzwmHCjF4FuaXNUZsWhc";
+
 var flashcards = [
     makeCard("riesling", "sweet white, off-dry apricots peaches"),
     makeCard("sancerre", "dry white, light herbal grassy"),
@@ -41,10 +46,16 @@ function nextCard() {
     return flashcards[0];
 }
 
-function promote(card) {
-    ++card.numRight;
-    var interval = intervalsInSeconds[Math.min(card.numRight, intervalsInSeconds.length-1)];
-    card.nextTime = futureTime(interval, interval*0.1);
+function answered(card, wasRight) {
+    if (wasRight) {
+        ++card.numRight;
+        card.bucket = Math.min(card.bucket+1, MAX_BUCKET); 
+    } else {
+        ++card.numWrong;
+        card.bucket = Math.max(card.bucket-1, 0);
+    }
+    var interval = intervalsInSeconds[card.bucket];
+    card.nextTime += perturbInterval(interval);
     reschedule(flashcards);
 }
 
@@ -58,10 +69,10 @@ function reschedule(flashcards) {
     }    
 }
 
-function futureTime(nSecondsFromNow, randomPerturbationWidth) {
-    var now = new Date().getTime();
+function perturbInterval(nSeconds) {
+    var randomPerturbationWidth = nSeconds * 0.1;
     var perturb = (-1 + 2*Math.random()) * randomPerturbationWidth;
-    var result = now + nSecondsFromNow + perturb;
+    var result = nSeconds + perturb;
     console.log(result);
     return result;
 }
@@ -79,11 +90,36 @@ function sendCard(card) {
     });
 }
 
+function fetchCards() {
+  var response;
+  var request = new XMLHttpRequest();
+  request.open('GET', "https://spreadsheets.google.com/feeds/list/" +
+                SPREADSHEET_KEY + "/od6/public/values?alt=json", true);
+  request.onload = function(e) {
+    if (request.readyState == 4) {
+      if(request.status == 200) {
+        console.log(request.responseText);
+        response = JSON.parse(request.responseText);
+        console.log(request.responseText);
+        console.log(response.feed.entry[0].content.$t)
+        sendCard(nextCard());
+      } else {
+        console.log("Error");
+      }
+    } else {
+        console.log("readyState = " + request.readyState);        
+    }
+  }
+  request.onerror = function(e) {
+      console.log("onerror!");
+  }
+  request.send(null);
+}
 
 Pebble.addEventListener("ready",
                         function(e) {
                             console.log("ready: " + e.ready);
-                            sendCard(nextCard());
+                            fetchCards();
                         });
 
 Pebble.addEventListener("appmessage",
@@ -94,8 +130,10 @@ Pebble.addEventListener("appmessage",
                                         + ", result=" + e.payload.result
                                         );
                             var card = findCard(e.payload.front, e.payload.back);
+                            var wasRight = (e.payload.result == 1);
+                            //wasRight = false; // only for testing
                             if (card) {
-                                promote(card);
+                                answered(card, wasRight);
                             }
                             sendCard(nextCard());
                         });
