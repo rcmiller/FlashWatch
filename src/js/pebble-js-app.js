@@ -24,13 +24,6 @@ var flashcards = [
     makeCard("riesling", "sweet white, off-dry apricots peaches"),
     makeCard("sancerre", "dry white, light herbal grassy"),
     makeCard("pinot grigio", "dry white, light citrus lemon"),
-    makeCard("pinot blanc", "dry white, light grapefruit floral"),
-    makeCard("cotes du rhone", "fruity red, strawberry cherry, round"),
-    makeCard("cabernet sauvignon", "fruity red, black cherry raspberry, high tannin"),
-    makeCard("shiraz", "fruity red, blueberry blackberry, spicy"),
-    makeCard("chianti", "savory red, clay cured meats, high tannin"),
-    makeCard("pinot noir", "fruity red, strawberry cherry, round"),
-    makeCard("merlot", "fruity red, black cherry raspberry, round"),
 ];
 reschedule(flashcards);
 
@@ -96,24 +89,31 @@ function fetchCards() {
   request.open('GET', "https://spreadsheets.google.com/feeds/list/" +
                 SPREADSHEET_KEY + "/od6/public/values?alt=json", true);
   request.onload = function(e) {
-    if (request.readyState == 4) {
-      if(request.status == 200) {
-        console.log(request.responseText);
-        response = JSON.parse(request.responseText);
-        console.log(request.responseText);
-        console.log(response.feed.entry[0].content.$t)
-        sendCard(nextCard());
-      } else {
-        console.log("Error");
+      try {
+          if(request.status != 200) {
+              console.log("error: spreadsheet data fetched returned " + request.status);
+              return;
+          }
+          response = JSON.parse(request.responseText);
+          var entries = response.feed.entry;
+          flashcards = [];
+          for (var i in entries) {
+              var entry = entries[i];
+              var card = makeCard(entry.gsx$front.$t, entry.gsx$back.$t);
+              flashcards.push(card);
+          }
+          reschedule(flashcards);
+          sendCard(nextCard());
+      } catch (err) {
+          console.log("error: spreadsheet data parse threw an exception")
+          console.log(err);
       }
-    } else {
-        console.log("readyState = " + request.readyState);        
-    }
   }
   request.onerror = function(e) {
-      console.log("onerror!");
+      console.log("error: spreadsheet data fetched returned " + request.status);
   }
   request.send(null);
+    console.log("sent request for cards");
 }
 
 Pebble.addEventListener("ready",
