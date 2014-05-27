@@ -43,16 +43,9 @@ void flashcard_set(FlashCard* card, const char* front, const char* back) {
 //// Some hard-coded cards
 
 FlashCard cards[] = {
-  { "riesling", "sweet white, off-dry apricots peaches" },
-  { "sancerre", "dry white, light herbal grassy" },
-  { "pinot grigio", "dry white, light citrus lemon" },
-  { "pinot blanc", "dry white, light grapefruit floral" },
   { "cotes du rhone", "fruity red, strawberry cherry, round" },
   { "cabernet sauvignon", "fruity red, black cherry raspberry, high tannin" },
-  { "shiraz", "fruity red, blueberry blackberry, spicy" },
-  { "chianti", "savory red, clay cured meats, high tannin" },
-  { "pinot noir", "fruity red, strawberry cherry, round" },
-  { "merlot", "fruity red, black cherry raspberry, round" }
+  { "shiraz", "fruity red, blueberry blackberry, spicy" }
 };
 int num_cards = sizeof(cards) / sizeof(cards[0]);
 
@@ -241,13 +234,6 @@ void connection_create() {
     // open the AppMessage library
     result = app_message_open(buffer_size, buffer_size);
     APP_LOG(APP_LOG_LEVEL_ERROR, "app_message_open returned %s", translate_error(result));
-    
-    // open the AppSync library
-    Tuplet tuples[] = {
-        TupletCString(FLASH_KEY_FRONT, ""),
-        TupletCString(FLASH_KEY_BACK, ""),
-        TupletInteger(FLASH_KEY_RESULT, 0),
-    };        
     
     // register callbacks
     app_message_register_inbox_received(connection_received);
