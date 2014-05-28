@@ -11,6 +11,21 @@ var intervalsInSeconds = [
 var MAX_BUCKET = intervalsInSeconds.length-1;
 
     
+///////// Configuration
+
+// localStorage[SPREADSHEET_KEY] is the key for the Google spreadsheet containing the flashcards.
+var SPREADSHEET_KEY = "SPREADSHEET_KEY";
+if (localStorage[SPREADSHEET_KEY] === undefined) {
+    // https://docs.google.com/spreadsheets/d/1N8aS2k7XNKiE3cMEQDvbVNl0VEv5KgRB_ZjavyQAthk/edit?usp=sharing
+    localStorage[SPREADSHEET_KEY] =          "1N8aS2k7XNKiE3cMEQDvbVNl0VEv5KgRB_ZjavyQAthk";        
+}
+
+// The default flashcard set is a set of wine varietals.
+// To create your own flashcard set, make a copy of:
+//    https://docs.google.com/spreadsheets/d/1N8aS2k7XNKiE3cMEQDvbVNl0VEv5KgRB_ZjavyQAthk/edit?usp=sharing
+// edit it, and use the FlashWatch Settings page on your phone to set your new spreadsheet's key.
+
+
 ///////// Flashcard datatype
 
 // Make a flashcard, where front and back are strings.
@@ -117,12 +132,15 @@ function rescheduleCard(card, afterInterval) {
 
 ////////// Google spreadsheet connection
 
-// Key of a publicly-readable spreadsheet.
-// (You'll find the key in the URL of the spreadsheet.) 
-var SPREADSHEET_KEY = "1oqSDgRxPEskr2v2G0HlArZjAzwmHCjF4FuaXNUZsWhc";
 
 // Fetch the flashcard set from a Google spreadsheet identified by spreadsheetKey.
-function fetchCards(spreadsheetKey) {
+function fetchCards() {
+  var spreadsheetKey = localStorage[SPREADSHEET_KEY];
+  if (!spreadsheetKey) {
+      console.log("no spreadsheet configured");
+      return;
+  }
+    
   var response;
   var request = new XMLHttpRequest();
   request.open('GET', "https://spreadsheets.google.com/feeds/list/" +
@@ -157,13 +175,14 @@ function fetchCards(spreadsheetKey) {
 
 
 
+
 ////////// Communication to the watch app
 
 // Called when the watch app is ready
 Pebble.addEventListener("ready",
                         function(e) {
                             console.log("ready: " + e.ready);
-                            fetchCards(SPREADSHEET_KEY);
+                            fetchCards();
                         });
 
 // Called when the watch app sends a message to the phone
@@ -207,3 +226,29 @@ function answered(card, wasRight) {
 
     saveCardToLocalStorage(card);    
 }
+
+
+////////// Configuration
+
+var CONFIGURATION_URL = 'https://rawgit.com/rcmiller/FlashWatch/master/src/js/configure.html';
+
+
+// Called when the user requests the configuration page on the phone
+Pebble.addEventListener("showConfiguration",
+                        function(e) {
+                            console.log("show configuration " + localStorage[SPREADSHEET_KEY]);
+                            Pebble.openURL(CONFIGURATION_URL + "?" + localStorage[SPREADSHEET_KEY]);
+                        });
+
+
+// Called when the user closes the configuration page on the phone
+Pebble.addEventListener("webviewclosed",
+                        function(e) {                            
+                            console.log("configuration window returned " + e.response);
+                            if (e.response) {
+                                localStorage[SPREADSHEET_KEY] = e.response;
+                                fetchCards();
+                            }
+                        });
+
+

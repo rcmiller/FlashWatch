@@ -17,7 +17,7 @@
         "watchface": false
     },
     "capabilities": [
-        ""
+        "configurable"
     ],
     "shortName": "FlashWatch",
     "versionCode": 1
