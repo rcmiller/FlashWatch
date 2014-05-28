@@ -16,7 +16,7 @@ var MAX_BUCKET = intervalsInSeconds.length-1;
 // Make a flashcard, where front and back are strings.
 // A card is uniquely identified by its front/back pair.
 function makeCard(front, back) {
-    console.log("making card front=" + front + ", back=" + back);
+    //console.log("making card front=" + front + ", back=" + back);
     var card = {
         front: front,
         back: back,
@@ -55,14 +55,14 @@ function reloadCardFromLocalStorage(card) {
     card.numWrong = storedCard.numWrong;
     card.bucket = storedCard.bucket;
     card.nextTime = storedCard.nextTime;
-    console.log("reloaded card " + json);
+    //console.log("reloaded card " + json);
 }
 
 function saveCardToLocalStorage(card) {
     var key = localStorageCardKey(card);
     var json = JSON.stringify(card);
     localStorage[key] = json;
-    console.log("stored card " + json);
+    //console.log("stored card " + json);
 }
 
 function localStorageCardKey(card) {
@@ -82,7 +82,7 @@ var flashcards = [
 ];
 
 // ensure that the flashcard set is sorted by time
-reschedule(flashcards);
+sortCards(flashcards);
 
 // find a card object in the flashcards set, given its front/back pair
 function findCard(front, back) {
@@ -93,23 +93,27 @@ function findCard(front, back) {
     return null;
 }
 
-// get the next card from the flashcards set
-function nextCard() {
-    return flashcards[0];
-}
-
 // sort the flashcards in increasing order of next presentation time
-function reschedule(flashcards) {
+function sortCards(flashcards) {
     flashcards.sort(function(a,b) {
         return a.nextTime - b.nextTime;
     });
+    /*
     for (var i in flashcards) {
         var card = flashcards[i];
         console.log(card.front + " / " + card.back + " / " + card.nextTime);
-    }    
+    }
+    */
 }
 
-
+function rescheduleCard(card, afterInterval) {
+    var lowestCard = flashcards[0];
+    if (lowestCard == card) {
+        lowestCard = flashcards[1];
+    }
+    card.nextTime = lowestCard.nextTime + afterInterval;
+    sortCards(flashcards);
+}
 
 ////////// Google spreadsheet connection
 
@@ -137,8 +141,8 @@ function fetchCards(spreadsheetKey) {
               var card = makeCard(entry.gsx$front.$t, entry.gsx$back.$t);
               flashcards.push(card);
           }
-          reschedule(flashcards);
-          sendCard(nextCard());
+          sortCards(flashcards);
+          sendNextCards();
       } catch (err) {
           console.log("error: spreadsheet data parse threw an exception")
           console.log(err);
@@ -175,14 +179,16 @@ Pebble.addEventListener("appmessage",
                             if (card) {
                                 answered(card, wasRight);
                             }
-                            sendCard(nextCard());
+                            sendNextCards();
                         });
 
-// Send a card to the watch for display
-function sendCard(card) {
+// Send next two cards to the watch for display
+function sendNextCards() {
     Pebble.sendAppMessage({
-        "front": card.front,
-         "back": card.back,
+        "front": flashcards[0].front,
+         "back": flashcards[0].back,
+        "nextFront": flashcards[1].front,
+         "nextBack": flashcards[1].back,
     });
 }
 
@@ -195,10 +201,9 @@ function answered(card, wasRight) {
         ++card.numWrong;
         card.bucket = Math.max(card.bucket-1, 0);
     }
-    var interval = intervalsInSeconds[card.bucket];
-    card.nextTime += perturbInterval(interval);
-
-    saveCardToLocalStorage(card);
     
-    reschedule(flashcards);
+    var interval = perturbInterval(intervalsInSeconds[card.bucket]);
+    rescheduleCard(card, interval);
+
+    saveCardToLocalStorage(card);    
 }

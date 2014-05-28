@@ -1,7 +1,8 @@
 #include <pebble.h>
 
 // forward declarations
-void connection_send_result(bool wasRight);
+void flashcards_received();
+void answered(bool wasRight);
 
 //// UI elements 
 Window *window = NULL;
@@ -14,15 +15,6 @@ enum AppState {
     SHOWING_TWO_FACES, // both exist, both visible
 } theState = WAITING_FOR_CARD;
 
-//// copying a string into fresh memory
-
-char *strdup(const char *s) {
-    char *t = malloc(strlen(s));
-    if (!t) return NULL;
-    strcpy(t, s);
-    return t;
-}
-
 //// Flashcard data representation
 
 #define MAX_TEXT 100
@@ -32,27 +24,15 @@ typedef struct {
   char back[MAX_TEXT];
 } FlashCard;
 
-FlashCard theCard;
+// cards[0] is the current card showing; cards[1] is on deck
+FlashCard cards[2];
+
+// number of cards currently in the cards[] array
+int num_cards = 0;
 
 void flashcard_set(FlashCard* card, const char* front, const char* back) {
     strncpy(card->front, front, sizeof(card->front)-1);
     strncpy(card->back, back, sizeof(card->back)-1);
-}
-
-
-//// Some hard-coded cards
-
-FlashCard cards[] = {
-  { "cotes du rhone", "fruity red, strawberry cherry, round" },
-  { "cabernet sauvignon", "fruity red, black cherry raspberry, high tannin" },
-  { "shiraz", "fruity red, blueberry blackberry, spicy" }
-};
-int num_cards = sizeof(cards) / sizeof(cards[0]);
-
-
-FlashCard* pick_any_card() {
-    // pick a card to show
-    return &cards[rand() % num_cards];
 }
 
 
@@ -78,7 +58,7 @@ TextLayer* make_text(const char* text, bool is_front) {
     int16_t screen_height = bounds.size.h;
     int16_t half_screen_height = screen_height/2;
   
-	  TextLayer* layer = text_layer_create(GRect(0, is_front ? 0 : half_screen_height, 144, screen_height));
+	TextLayer* layer = text_layer_create(GRect(0, is_front ? 0 : half_screen_height, 144, screen_height));
   	text_layer_set_text(layer, text);
   	text_layer_set_text_alignment(layer, GTextAlignmentLeft);
 
@@ -147,17 +127,13 @@ void select_click_handler(ClickRecognizerRef recognizer, void *context) {
 
 void up_click_handler(ClickRecognizerRef recognizer, void *context) {
     if (theState == SHOWING_TWO_FACES) {
-        // send result and request a new flashcard
-        destroy_flashcard_layers();
-        connection_send_result(true);
+        answered(true);
     }
 }
 
 void down_click_handler(ClickRecognizerRef recognizer, void *context) {
     if (theState == SHOWING_TWO_FACES) {
-        // send result and request a new flashcard
-        destroy_flashcard_layers();
-        connection_send_result(false);
+        answered(false);
     }
 }
 
@@ -173,9 +149,11 @@ void click_config_provider(void *context) {
 
 // keys for message tuple
 enum {
-  FLASH_KEY_FRONT = 0x0,  // type: string
-  FLASH_KEY_BACK = 0x1,   // type: string
-  FLASH_KEY_RESULT = 0x2, // type: uint8:  0 if wrong, 1 if right
+  FLASH_KEY_FRONT = 0x0,      // type: string
+  FLASH_KEY_BACK = 0x1,       // type: string
+  FLASH_KEY_RESULT = 0x2,     // type: uint8:  0 if wrong, 1 if right
+  FLASH_KEY_NEXT_FRONT = 0x3, // type: string
+  FLASH_KEY_NEXT_BACK = 0x4,  // type: string
 };
 
 char *translate_error(AppMessageResult result) {
@@ -209,15 +187,23 @@ void connection_received(DictionaryIterator* iterator, void *context) {
         APP_LOG(APP_LOG_LEVEL_ERROR, "front tuple or back tuple is null");
         return;
     }
-    APP_LOG(APP_LOG_LEVEL_ERROR, "received new card: front=%s, back=%s", front_tuple->value->cstring, back_tuple->value->cstring);
-    flashcard_set(&theCard, front_tuple->value->cstring, back_tuple->value->cstring);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "received new card: front=%s, back=%s", front_tuple->value->cstring, back_tuple->value->cstring);
+    flashcard_set(&cards[0], front_tuple->value->cstring, back_tuple->value->cstring);
+    num_cards = 1;
     
-    destroy_flashcard_layers();
-    create_flashcard_layers(&theCard);  
+    Tuple *next_front_tuple = dict_find(iterator, FLASH_KEY_NEXT_FRONT);
+    Tuple *next_back_tuple = dict_find(iterator, FLASH_KEY_NEXT_BACK);  
+    if (next_front_tuple && next_back_tuple) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "received following card: front=%s, back=%s", next_front_tuple->value->cstring, next_back_tuple->value->cstring);
+        flashcard_set(&cards[1], next_front_tuple->value->cstring, next_back_tuple->value->cstring);
+        num_cards = 2;
+    }
+    
+    flashcards_received();
 }
 
 void connection_sent() {
-    APP_LOG(APP_LOG_LEVEL_ERROR, "send succeeded");    
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "send succeeded");    
 }
 
 void connection_send_failed(DictionaryIterator *iterator, AppMessageResult reason, void *context) {
@@ -227,13 +213,15 @@ void connection_send_failed(DictionaryIterator *iterator, AppMessageResult reaso
 void connection_create() {
     AppMessageResult result;
     
-    // make the buffer big enough to hold question/answer/result
-    int buffer_size = dict_calc_buffer_size(3, MAX_TEXT, MAX_TEXT, 1);
-    APP_LOG(APP_LOG_LEVEL_ERROR, "buffer size=%d", buffer_size);  
+    // make the buffer big enough to hold 2 cards (front/back) plus a result
+    int buffer_size = dict_calc_buffer_size(5, MAX_TEXT, MAX_TEXT, MAX_TEXT, MAX_TEXT, 1);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "buffer size=%d", buffer_size);  
 
     // open the AppMessage library
     result = app_message_open(buffer_size, buffer_size);
-    APP_LOG(APP_LOG_LEVEL_ERROR, "app_message_open returned %s", translate_error(result));
+    if (result != APP_MSG_OK) {
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "app_message_open returned %s", translate_error(result));
+    }
     
     // register callbacks
     app_message_register_inbox_received(connection_received);
@@ -248,17 +236,46 @@ void connection_send_result(bool wasRight) {
     AppMessageResult result;
     DictionaryIterator *iter;
     result = app_message_outbox_begin(&iter);
-    APP_LOG(APP_LOG_LEVEL_ERROR, "app_message_outbox_begin returned %s", translate_error(result)); 
     if (result != APP_MSG_OK) {
+        APP_LOG(APP_LOG_LEVEL_ERROR, "app_message_outbox_begin returned %s", translate_error(result)); 
         return;
     }
     
-    dict_write_cstring(iter, FLASH_KEY_FRONT, theCard.front);
-    dict_write_cstring(iter, FLASH_KEY_BACK, theCard.back);
+    dict_write_cstring(iter, FLASH_KEY_FRONT, cards[0].front);
+    dict_write_cstring(iter, FLASH_KEY_BACK, cards[0].back);
     dict_write_uint8(iter, FLASH_KEY_RESULT, (uint8_t) wasRight);
     
     result = app_message_outbox_send();
-    APP_LOG(APP_LOG_LEVEL_ERROR, "app_message_outbox_send returned %s", translate_error(result));
+    if (result != APP_MSG_OK) {
+        APP_LOG(APP_LOG_LEVEL_ERROR, "app_message_outbox_send returned %s", translate_error(result));
+    }
+}
+
+
+//// App-level events
+
+// Called after the phone sends some flashcards
+void flashcards_received() {
+    if (theState == WAITING_FOR_CARD) {
+        create_flashcard_layers(&cards[0]);
+    }    
+}
+
+// Called when user is done with the flashcard 
+void answered(bool wasRight) {    
+    // send result and request new flashcards
+    destroy_flashcard_layers();
+    connection_send_result(wasRight);
+    
+    // move next card into current card's spot
+    flashcard_set(&cards[0], cards[1].front, cards[1].back);
+    --num_cards;
+    
+    // display the next card, if we have one
+    if (num_cards > 0) {
+        // display next card
+        create_flashcard_layers(&cards[0]);
+    }    
 }
 
 //// App setup and teardown
