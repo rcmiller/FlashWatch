@@ -5,8 +5,6 @@ var intervalsInSeconds = [
     5,
     25, 
     120, // 2 minutes
-    600, // 10 minutes
-    3600, // 1 hour    
 ]
 var MAX_BUCKET = intervalsInSeconds.length-1;
 
@@ -38,18 +36,36 @@ function makeCard(front, back) {
         numRight: 0,
         numWrong: 0,
         bucket: 0,
-        nextTime: perturbInterval(intervalsInSeconds[0])
+        nextTime: futureRandomTime(intervalsInSeconds[0])
     };
     reloadCardFromLocalStorage(card);
     return card;
 }
 
-// return nSeconds +/- 10%
-function perturbInterval(nSeconds) {
-    var randomPerturbationWidth = nSeconds * 0.1;
+
+///////// Time intervals
+
+// The current time in the timeline of the flashcards.
+// This isn't wallclock time.  It's just an artificial sequence that starts
+// from 0, and allows us to do spaced repetition between cards.
+// Every time we show the next card, we advance currentTime to the card's timestamp.
+// Every time we schedule a card to be shown in the future, we do it relative to currentTime.
+var currentTime = 15039;
+if (localStorage["currentTime"] !== undefined) {
+    currentTime = parseInt(localStorage["currentTime"]);
+}
+console.log("currentTime = " + currentTime)
+
+function setCurrentTime(newTime) {
+    currentTime = newTime;
+    localStorage["currentTime"] = currentTime;
+}
+
+// return a future time, which is meanSecondsInFuture ahead of now, plus or minus up to 10% random amount 
+function futureRandomTime(meanSecondsInFuture) {
+    var randomPerturbationWidth = meanSecondsInFuture * 0.1;
     var perturb = (-1 + 2*Math.random()) * randomPerturbationWidth;
-    var result = nSeconds + perturb;
-    return result;
+    return currentTime + meanSecondsInFuture + perturb;
 }
 
     
@@ -68,8 +84,11 @@ function reloadCardFromLocalStorage(card) {
     var storedCard = JSON.parse(json);
     card.numRight = storedCard.numRight;
     card.numWrong = storedCard.numWrong;
-    card.bucket = storedCard.bucket;
+    card.bucket = Math.max(0, Math.min(intervalsInSeconds.length-1, storedCard.bucket));
     card.nextTime = storedCard.nextTime;
+    if (! (card.nextTime > currentTime)) {
+        rescheduleCard(card);
+    }
     //console.log("reloaded card " + json);
 }
 
@@ -113,20 +132,12 @@ function sortCards(flashcards) {
     flashcards.sort(function(a,b) {
         return a.nextTime - b.nextTime;
     });
-    /*
-    for (var i in flashcards) {
-        var card = flashcards[i];
-        console.log(card.front + " / " + card.back + " / " + card.nextTime);
-    }
-    */
+    
 }
 
-function rescheduleCard(card, afterInterval) {
-    var lowestCard = flashcards[0];
-    if (lowestCard == card) {
-        lowestCard = flashcards[1];
-    }
-    card.nextTime = lowestCard.nextTime + afterInterval;
+function rescheduleCard(card) {
+    var afterInterval = futureRandomTime(intervalsInSeconds[card.bucket]);    
+    card.nextTime = currentTime + afterInterval;
     sortCards(flashcards);
 }
 
@@ -158,7 +169,12 @@ function fetchCards() {
               var entry = entries[i];
               var card = makeCard(entry.gsx$front.$t, entry.gsx$back.$t);
               flashcards.push(card);
-          }
+          } 
+
+          for (var i in flashcards) {
+              var card = flashcards[i];
+              console.log(JSON.stringify(card));//card.front + " / " + card.back + " / " + card.nextTime + " / " + card.bucket);
+          }      
           sortCards(flashcards);
           sendNextCards();
       } catch (err) {
@@ -221,10 +237,13 @@ function answered(card, wasRight) {
         card.bucket = Math.max(card.bucket-1, 0);
     }
     
-    var interval = perturbInterval(intervalsInSeconds[card.bucket]);
-    rescheduleCard(card, interval);
+    setCurrentTime(card.nextTime);
+    console.log("currentTime = " + currentTime)    
 
-    saveCardToLocalStorage(card);    
+    rescheduleCard(card);
+
+    saveCardToLocalStorage(card);
+    console.log("updated card: " + JSON.stringify(card));
 }
 
 
