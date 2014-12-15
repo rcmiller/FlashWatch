@@ -1,22 +1,23 @@
 {
-    "resources": {
-        "media": []
+    "appKeys": {
+        "back": 1,
+        "front": 0,
+        "nextBack": 4,
+        "nextFront": 3,
+        "result": 2
     },
     "capabilities": [
         "configurable"
     ],
-    "uuid": "6a99ac7c-1402-4427-8d8c-7013a1769e63",
-    "shortName": "FlashWatch",
-    "versionCode": 1,
     "companyName": "rcm@mit.edu",
-    "appKeys": {
-        "back": 1,
-        "nextFront": 3,
-        "result": 2,
-        "nextBack": 4,
-        "front": 0
-    },
     "longName": "FlashWatch",
+    "projectType": "native",
+    "resources": {
+        "media": []
+    },
+    "shortName": "FlashWatch",
+    "uuid": "6a99ac7c-1402-4427-8d8c-7013a1769e63",
+    "versionCode": 1,
     "versionLabel": "1.0",
     "watchapp": {
         "watchface": false

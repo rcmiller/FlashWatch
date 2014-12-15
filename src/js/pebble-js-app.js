@@ -19,9 +19,13 @@ if (localStorage[SPREADSHEET_KEY] === undefined) {
 }
 
 // The default flashcard set is a set of wine varietals.
-// To create your own flashcard set, make a copy of:
-//    https://docs.google.com/spreadsheets/d/1N8aS2k7XNKiE3cMEQDvbVNl0VEv5KgRB_ZjavyQAthk/edit?usp=sharing
-// edit it, and use the FlashWatch Settings page on your phone to set your new spreadsheet's key.
+// To create your own flashcard set:
+// 1. Open the default flashcard spreadsheet by visiting
+//        https://docs.google.com/spreadsheets/d/1N8aS2k7XNKiE3cMEQDvbVNl0VEv5KgRB_ZjavyQAthk/edit?usp=sharing
+// 2. Make a copy of the spreadsheet using File / Make a Copy
+// 3. IMPORTANT ==> Publish the spreadsheet using File / Publish
+// 4. Edit the spreadsheet to change it to your own cards
+// 5. Use the FlashWatch Settings page on your phone to set your new spreadsheet's key.
 
 
 ///////// Flashcard datatype
@@ -155,7 +159,7 @@ function fetchCards() {
   var response;
   var request = new XMLHttpRequest();
   request.open('GET', "https://spreadsheets.google.com/feeds/list/" +
-                spreadsheetKey + "/od6/public/values?alt=json", true);
+                spreadsheetKey + "/default/public/values?alt=json", true);
   request.onload = function(e) {
       try {
           if(request.status != 200) {
